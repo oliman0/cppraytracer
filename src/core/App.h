@@ -10,6 +10,7 @@
 #include "VertexLayout.h"
 #include "RaytracerStructDefs.h"
 #include "Camera.h"
+#include "ObjLoader.h"
 
 class RayTracerApp
 {
@@ -38,7 +39,7 @@ private:
 	SDL_GPUBuffer* m_pScreenQuadVertexBuffer;
 	int m_screenQuadVertexCount;
 
-	SceneData m_sceneData;
+	RTSceneData m_sceneData;
 
 	void UpdateFPSCounter();
 	Uint64 m_lastCount;

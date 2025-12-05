@@ -4,37 +4,37 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
-struct SceneData
+struct RTSceneData
 {
 	uint numModels;
 	uint maxBounceCount;
 	uint samplePerPixel;
 };
 
-struct Material
+struct RTMaterial
 {
 	vec4 colour;
 	vec4 emission; // xyz: emission colour, w : emission strength
 };
 
-struct Sphere 
+struct RTSphere
 {
 	vec4 center_radius; // xyz: center, w: radius
-	Material material;
+	RTMaterial material;
 };
 
-struct Triangle
+struct RTTriangle
 {
 	vec4 a, b, c;
 	vec4 normalA, normalB, normalC;
 };
 
-struct Mesh
+struct RTMesh
 {
 	uint triangleOffset;
 	uint triangleCount;
 	vec4 bboxMin, bboxMax;
-	Material material;
+	RTMaterial material;
 };
 
 #endif

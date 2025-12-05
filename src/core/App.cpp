@@ -221,11 +221,11 @@ RayTracerApp::RayTracerApp() :
 	SDL_free(pComputeCode);
 
 	SDL_GPUBufferCreateInfo modelBufferInfo{};
-	modelBufferInfo.size = sizeof(Sphere) * MAX_MODELS;
+	modelBufferInfo.size = sizeof(RTSphere) * MAX_MODELS;
 	modelBufferInfo.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
     m_pComputeModelBuffer = SDL_CreateGPUBuffer(m_pDevice, &modelBufferInfo);
 
-    Sphere spheres[3];
+    RTSphere spheres[3];
 
     spheres[0].center_radius = vec4(0.0f, 0.0f, 0.0f, 5.0f);
 	spheres[0].material.colour = vec4(0.0f, 0.0f, 0.0, 0.0f);
@@ -244,7 +244,7 @@ RayTracerApp::RayTracerApp() :
 	modelTransferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
 	SDL_GPUTransferBuffer* modelTransferBuffer = SDL_CreateGPUTransferBuffer(m_pDevice, &modelTransferInfo);
 
-	auto pSphereData = static_cast<Sphere *>(SDL_MapGPUTransferBuffer(m_pDevice, modelTransferBuffer, false));
+	auto pSphereData = static_cast<RTSphere *>(SDL_MapGPUTransferBuffer(m_pDevice, modelTransferBuffer, false));
 	SDL_memcpy(pSphereData, spheres, sizeof(spheres));
 	SDL_UnmapGPUTransferBuffer(m_pDevice, modelTransferBuffer);
 
@@ -260,7 +260,7 @@ RayTracerApp::RayTracerApp() :
 	modelBufferRegion.size = sizeof(spheres);
 	modelBufferRegion.offset = 0;
 
-	m_sceneData.numModels = sizeof(spheres) / sizeof(Sphere);
+	m_sceneData.numModels = sizeof(spheres) / sizeof(RTSphere);
 	m_sceneData.maxBounceCount = 30;
 	m_sceneData.samplePerPixel = 50;
 
@@ -299,7 +299,7 @@ void RayTracerApp::FrameUpdate()
 	// Upload the Camera view data and SceneData uniforms to the shader
     CameraData cameraData = m_camera.GetCameraData();
     SDL_PushGPUComputeUniformData(pCommandBuffer, 0, &cameraData, sizeof(CameraData));
-    SDL_PushGPUComputeUniformData(pCommandBuffer, 1, &m_sceneData, sizeof(SceneData));
+    SDL_PushGPUComputeUniformData(pCommandBuffer, 1, &m_sceneData, sizeof(RTSceneData));
 
 	// Bind the read/write texture to use as a render target
 	SDL_GPUStorageTextureReadWriteBinding textureBinding{};
@@ -373,6 +373,8 @@ void RayTracerApp::FrameUpdate()
 
     SDL_EndGPURenderPass(pRenderPass);
     SDL_SubmitGPUCommandBuffer(pCommandBuffer);
+
+	LoadObjFileTriangles("../cube.obj");
 }
 
 void RayTracerApp::UpdateFPSCounter() 
