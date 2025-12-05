@@ -1,13 +1,13 @@
 #include "App.h"
 
 RayTracerApp::RayTracerApp() :
-	m_camera(45.0f, 0.1f),
-	m_lastMousePosition(0.0f),
-	m_lastCount(0), m_countDelta(0),
 	m_computeSizeX(8), m_computeSizeY(8),
 	m_dispatchSizeX((SCREEN_WIDTH + m_computeSizeX - 1) / m_computeSizeX),
 	m_dispatchSizeY((SCREEN_HEIGHT + m_computeSizeY - 1) / m_computeSizeY),
-	m_sceneData(0)
+	m_sceneData(0),
+	m_lastCount(0), m_countDelta(0),
+	m_camera(45.0f, 0.1f),
+	m_lastMousePosition(0.0f)
 {
 	m_frequency = SDL_GetPerformanceFrequency();
 
@@ -41,7 +41,7 @@ RayTracerApp::RayTracerApp() :
     transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     SDL_GPUTransferBuffer* vertexTransferBuffer = SDL_CreateGPUTransferBuffer(m_pDevice, &transferInfo);
 
-    Vertex* data = (Vertex*)SDL_MapGPUTransferBuffer(m_pDevice, vertexTransferBuffer, false);
+    auto data = static_cast<Vertex *>(SDL_MapGPUTransferBuffer(m_pDevice, vertexTransferBuffer, false));
 	SDL_memcpy(data, vertices, sizeof(vertices));
     SDL_UnmapGPUTransferBuffer(m_pDevice, vertexTransferBuffer);
 
@@ -87,13 +87,13 @@ RayTracerApp::RayTracerApp() :
     size_t vertexCodeSize;
     void* pVertexCode = SDL_LoadFile("./screenShader.vert.spv", &vertexCodeSize);
 
-    if (vertexCodeSize == 0 || pVertexCode == NULL)
+    if (vertexCodeSize == 0 || pVertexCode == nullptr)
     {
         std::cerr << "Failed to load vertex shader." << std::endl;
 	}
 
     SDL_GPUShaderCreateInfo vertexInfo{};
-    vertexInfo.code = (Uint8*)pVertexCode;
+    vertexInfo.code = static_cast<Uint8 *>(pVertexCode);
     vertexInfo.code_size = vertexCodeSize;
     vertexInfo.entrypoint = "main";
     vertexInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
@@ -109,13 +109,13 @@ RayTracerApp::RayTracerApp() :
     size_t fragmentCodeSize;
     void* pFragmentCode = SDL_LoadFile("./screenShader.frag.spv", &fragmentCodeSize);
 
-    if (fragmentCodeSize == 0 || pFragmentCode == NULL)
+    if (fragmentCodeSize == 0 || pFragmentCode == nullptr)
     {
         std::cerr << "Failed to load fragment shader." << std::endl;
     }
 
     SDL_GPUShaderCreateInfo fragmentInfo{};
-    fragmentInfo.code = (Uint8*)pFragmentCode;
+    fragmentInfo.code = static_cast<Uint8 *>(pFragmentCode);
     fragmentInfo.code_size = fragmentCodeSize;
     fragmentInfo.entrypoint = "main";
     fragmentInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
@@ -199,7 +199,7 @@ RayTracerApp::RayTracerApp() :
 	SDL_GPUComputePipelineCreateInfo computePipelineInfo{};
 
     computePipelineInfo.code_size = computeCodeSize;
-	computePipelineInfo.code = (Uint8*)pComputeCode;
+	computePipelineInfo.code = static_cast<Uint8 *>(pComputeCode);
 	computePipelineInfo.entrypoint = "main";
 	computePipelineInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
     computePipelineInfo.num_samplers = 0;
@@ -244,7 +244,7 @@ RayTracerApp::RayTracerApp() :
 	modelTransferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
 	SDL_GPUTransferBuffer* modelTransferBuffer = SDL_CreateGPUTransferBuffer(m_pDevice, &modelTransferInfo);
 
-	Sphere* pSphereData = (Sphere*)SDL_MapGPUTransferBuffer(m_pDevice, modelTransferBuffer, false);
+	auto pSphereData = static_cast<Sphere *>(SDL_MapGPUTransferBuffer(m_pDevice, modelTransferBuffer, false));
 	SDL_memcpy(pSphereData, spheres, sizeof(spheres));
 	SDL_UnmapGPUTransferBuffer(m_pDevice, modelTransferBuffer);
 
@@ -292,14 +292,16 @@ RayTracerApp::~RayTracerApp()
 void RayTracerApp::FrameUpdate()
 {
 	UpdateFPSCounter();
-    HandleMovement((float)m_countDelta / (float)m_frequency);
+    HandleMovement(static_cast<float>(m_countDelta) / static_cast<float>(m_frequency));
 
     SDL_GPUCommandBuffer* pCommandBuffer = SDL_AcquireGPUCommandBuffer(m_pDevice);
 
+	// Upload the Camera view data and SceneData uniforms to the shader
     CameraData cameraData = m_camera.GetCameraData();
     SDL_PushGPUComputeUniformData(pCommandBuffer, 0, &cameraData, sizeof(CameraData));
     SDL_PushGPUComputeUniformData(pCommandBuffer, 1, &m_sceneData, sizeof(SceneData));
 
+	// Bind the read/write texture to use as a render target
 	SDL_GPUStorageTextureReadWriteBinding textureBinding{};
 	textureBinding.texture = m_pComputeRenderTarget;
 	textureBinding.mip_level = 0;
@@ -309,17 +311,23 @@ void RayTracerApp::FrameUpdate()
     SDL_GPUComputePass* pComputePass = SDL_BeginGPUComputePass(
         pCommandBuffer,
         &textureBinding,
-        1, 
+        1,
         nullptr,
         0
     );
 
+	// Bind the compute pipeline with our path tracing shader
 	SDL_BindGPUComputePipeline(pComputePass, m_pComputePipeline);
 
+	// Geometry Buffer is readonly so we bind in separately
     SDL_BindGPUComputeStorageBuffers(pComputePass, 0, &m_pComputeModelBuffer, 1);
 
+	// Dispatch with precalculated size to cover screen
 	SDL_DispatchGPUCompute(pComputePass, m_dispatchSizeX, m_dispatchSizeY, 1);
 	SDL_EndGPUComputePass(pComputePass);
+
+	// Display compute output
+	// Render the texture to a screen quad
 
     SDL_GPUTexture* pSwapchainTexture;
     Uint32 width, height;
@@ -345,7 +353,7 @@ void RayTracerApp::FrameUpdate()
     colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
     colorTargetInfo.texture = pSwapchainTexture;
 
-    SDL_GPURenderPass* pRenderPass = SDL_BeginGPURenderPass(pCommandBuffer, &colorTargetInfo, 1, NULL);
+    SDL_GPURenderPass* pRenderPass = SDL_BeginGPURenderPass(pCommandBuffer, &colorTargetInfo, 1, nullptr);
 
     SDL_BindGPUGraphicsPipeline(pRenderPass, m_pGraphicsPipeline);
 
@@ -374,7 +382,7 @@ void RayTracerApp::UpdateFPSCounter()
 
     if (m_countDelta > 0)
     {
-        const double fps = (double)m_frequency / (double)m_countDelta;
+        const double fps = static_cast<double>(m_frequency) / static_cast<double>(m_countDelta);
         std::cout << "FPS: " << fps << "\r" << std::endl;
     }
 
@@ -383,10 +391,10 @@ void RayTracerApp::UpdateFPSCounter()
 
 void RayTracerApp::HandleMovement(const float deltaTime)
 {
-    const bool* pKeyStates = SDL_GetKeyboardState(NULL);
+    const bool* pKeyStates = SDL_GetKeyboardState(nullptr);
 
     vec3 movement(0.0f);
-    float movementSpeed = 5.0f;
+    constexpr float movementSpeed = 5.0f;
 
     if (pKeyStates[SDL_SCANCODE_W])
     {
