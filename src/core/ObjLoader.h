@@ -4,7 +4,7 @@
 #include <vector>
 #include <fstream>
 
-#include "RaytracerStructDefs.h"
+#include "RaytracerScene.h"
 
 struct ObjVertex
 {

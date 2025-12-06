@@ -12,10 +12,20 @@ struct Material
 };
 
 // std140 aligned
-struct Sphere 
+struct Triangle
 {
-    float4 center_radius;
+    float4 a, b, c;
+    float4 normalA, normalB, normalC;
+};
+
+// std140 aligned
+struct Mesh
+{
+    float4 bboxMin, bboxMax;
     Material material;
+    uint triangleOffset;
+    uint triangleCount;
+    uint padding0, padding1;
 };
 
 struct Intersection 
@@ -40,10 +50,11 @@ cbuffer uCameraData : register(b0, space2)
     float4 viewParams;
 };
 
-StructuredBuffer<Sphere> uSpheres : register(t0, space0);
+StructuredBuffer<Triangle> uTriangles : register(t0, space0);
+StructuredBuffer<Mesh> uMeshes : register(t1, space0);
 cbuffer uSceneData : register(b1, space2)
 {
-    uint numSpheres;
+    uint numMeshes;
     uint maxBounces;
     uint samplesPerPixel;
 };
@@ -81,39 +92,64 @@ float3 RandomDirectionHemisphere(float3 normal, inout uint seed)
     return dir * sign(dot(dir, normal));
 }
 
-Intersection RaySphere(Ray ray, Sphere sphere)
+bool RayAABB(Ray ray, float3 bboxMin, float3 bboxMax)
 {
-    Intersection res = (Intersection) 0;
+    float3 invDir = 1.0 / ray.dir;
+    float3 t0s = (bboxMin - ray.origin) * invDir;
+    float3 t1s = (bboxMax - ray.origin) * invDir;
     
-    // Translate ray relative to sphere center
-    float3 oc = ray.origin - sphere.center_radius.xyz;
+    float3 tsmaller = min(t0s, t1s);
+    float3 tbigger = max(t0s, t1s);
     
-    // Quadratic coefficients
-    float a = dot(ray.dir, ray.dir);
-    float b = 2 * dot(oc, ray.dir);
-    float c = dot(oc, oc) - sphere.center_radius.w * sphere.center_radius.w;
-    float discriminant = b * b - 4 * a * c;
+    float tmin = max(max(tsmaller.x, tsmaller.y), tsmaller.z);
+    float tmax = min(min(tbigger.x, tbigger.y), tbigger.z);
     
-    // At least one intersection
-    if (discriminant >= 0)
+    return tmax >= max(tmin, 0.0);
+}
+
+Intersection RayTriangle(Ray ray, Triangle tri)
+{
+    Intersection intersection = (Intersection)0;
+    
+    float3 edgeAB = tri.b.xyz - tri.a.xyz;
+    float3 edgeAC = tri.c.xyz - tri.a.xyz;
+    
+    float3 pVec = cross(ray.dir, edgeAC);
+    float det = dot(edgeAB, pVec);
+
+    // Cull back-facing triangles
+    if (det < 1e-6)
     {
-        // To find the nearest intersection point
-        // solve for t using quadratic formula
-        res.dst = (-b - sqrt(discriminant)) / (2.0 * a);
-        
-        // Discard intersections behind the camera
-        if (res.dst >= 0.0)
-        {
-            res.hit = true;
-            
-            res.hitPoint = ray.origin + res.dst * ray.dir;
-            res.normal = normalize(res.hitPoint - sphere.center_radius.xyz);
-            
-            res.material = sphere.material;
-        }
+        intersection.hit = false;
+        return intersection;
+    }
+    // Ray is parallel to triangle plane
+    else if (abs(det) < 1e-6)
+    {
+        intersection.hit = false;
+        return intersection;
     }
     
-    return res;
+    float invDet = 1 / det;
+
+    float3 tVec = ray.origin - tri.a.xyz;
+    float3 qVec = cross(tVec, edgeAB);
+    
+    float u = dot(tVec, pVec) * invDet;
+    float v = dot(ray.dir, qVec) * invDet;
+    
+    if (u < 0 || u > 1 || v < 0 || (u + v) > 1)
+    {
+        intersection.hit = false;
+        return intersection;
+    }
+
+    intersection.dst = dot(edgeAC, qVec) * invDet;
+    intersection.hit = intersection.dst > 1e-6;
+    intersection.hitPoint = ray.origin + ray.dir * intersection.dst;
+    intersection.normal = normalize((1 - u - v) * tri.normalA.xyz + u * tri.normalB.xyz + v * tri.normalC.xyz);
+    
+    return intersection;
 }
 
 Intersection CalculateIntersection(Ray ray)
@@ -121,14 +157,25 @@ Intersection CalculateIntersection(Ray ray)
     Intersection closestIntersection = (Intersection) 0;
     closestIntersection.dst = 1.#INF;
 
-    for (uint i = 0; i < numSpheres; i++)
+    for (uint i = 0; i < numMeshes; i++)
     {
-        Sphere sphere = uSpheres[i];
-        Intersection intersection = RaySphere(ray, sphere);
+        Mesh meshInfo = uMeshes[i];
         
-        if (intersection.hit && intersection.dst < closestIntersection.dst)
+        if (!RayAABB(ray, meshInfo.bboxMin.xyz, meshInfo.bboxMax.xyz))
         {
-            closestIntersection = intersection;
+            continue;
+        }
+        
+        for (uint j = 0; j < meshInfo.triangleCount; j++)
+        {
+            Triangle tri = uTriangles[meshInfo.triangleOffset + j];
+            Intersection intersection = RayTriangle(ray, tri);
+
+            if (intersection.hit && intersection.dst < closestIntersection.dst)
+            {
+                closestIntersection = intersection;
+                closestIntersection.material = meshInfo.material;
+            }
         }
     }
 
@@ -169,13 +216,13 @@ void main(uint3 DTid : SV_DispatchThreadID)
     uint rndSeed = DTid.x + DTid.y * width;
     
     // Screen coordinates in [0, 1] range 
-    float2 ndc = float2(DTid.xy) / float2(width, height);
+    float2 ndc = float2(DTid.x, DTid.y) / float2(width, height);
     
     // Convert to view space
     // Transform to [-0.5, 0.5] range and scale by view params (size of the projection plane)
     float3 viewPointLocal = float3(ndc.xy - 0.5, 1.0) * viewParams.xyz;
     // Transform to world space
-    float3 viewPoint = cameraPosition.xyz + cameraRight.xyz * viewPointLocal.x + cameraUp.xyz * viewPointLocal.y + cameraForward.xyz * viewPointLocal.z;
+    float3 viewPoint = cameraPosition.xyz + cameraRight.xyz * viewPointLocal.x + cameraUp.xyz * -viewPointLocal.y + cameraForward.xyz * viewPointLocal.z;
     
     Ray ray;
     ray.origin = cameraPosition.xyz;
@@ -186,6 +233,19 @@ void main(uint3 DTid : SV_DispatchThreadID)
     {
         totalLight += TraceRay(ray, rndSeed);
     }
+
+    uOutputTexture[DTid.xy] = float4(totalLight / samplesPerPixel, 1);
     
-    uOutputTexture[DTid.xy] = float4(totalLight / samplesPerPixel, 1.0);
+    if (samplesPerPixel == 0)
+    {    
+        Intersection intersection = CalculateIntersection(ray);
+        if (intersection.hit)
+        {
+            uOutputTexture[DTid.xy] = float4(intersection.normal * 0.5 + 0.5, 1);
+        }
+        else
+        {
+            uOutputTexture[DTid.xy] = float4(0, 0, 0, 1);
+        }
+    }
 }

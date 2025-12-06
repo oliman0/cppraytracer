@@ -52,7 +52,7 @@ add_shaders(shader src/shader/screenShader.frag.hlsl src/shader/screenShader.ver
 
 add_executable(raytracer
         src/core/main.cpp
-        src/core/RaytracerStructDefs.h
+        src/core/RaytracerScene.h
         src/core/Global.h
         src/core/VertexLayout.h
         src/core/App.h
@@ -61,6 +61,7 @@ add_executable(raytracer
         src/core/Camera.cpp
         src/core/ObjLoader.h
         src/core/ObjLoader.cpp
+        src/core/RaytracerScene.cpp
 )
 target_link_libraries(raytracer PUBLIC "${CMAKE_SOURCE_DIR}/extern/lib/SDL3.lib")
 add_dependencies(raytracer shader)

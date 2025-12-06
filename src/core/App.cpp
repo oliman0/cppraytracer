@@ -4,7 +4,6 @@ RayTracerApp::RayTracerApp() :
 	m_computeSizeX(8), m_computeSizeY(8),
 	m_dispatchSizeX((SCREEN_WIDTH + m_computeSizeX - 1) / m_computeSizeX),
 	m_dispatchSizeY((SCREEN_HEIGHT + m_computeSizeY - 1) / m_computeSizeY),
-	m_sceneData(0),
 	m_lastCount(0), m_countDelta(0),
 	m_camera(45.0f, 0.1f),
 	m_lastMousePosition(0.0f)
@@ -204,7 +203,7 @@ RayTracerApp::RayTracerApp() :
 	computePipelineInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
     computePipelineInfo.num_samplers = 0;
     computePipelineInfo.num_readonly_storage_textures = 0;
-    computePipelineInfo.num_readonly_storage_buffers = 1;
+    computePipelineInfo.num_readonly_storage_buffers = 2;
     computePipelineInfo.num_readwrite_storage_textures = 1;
     computePipelineInfo.num_readwrite_storage_buffers = 0;
     computePipelineInfo.num_uniform_buffers = 2;
@@ -220,59 +219,22 @@ RayTracerApp::RayTracerApp() :
 
 	SDL_free(pComputeCode);
 
-	SDL_GPUBufferCreateInfo modelBufferInfo{};
-	modelBufferInfo.size = sizeof(RTSphere) * MAX_MODELS;
-	modelBufferInfo.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
-    m_pComputeModelBuffer = SDL_CreateGPUBuffer(m_pDevice, &modelBufferInfo);
+	SDL_GPUBufferCreateInfo triangleBufferInfo{};
+	triangleBufferInfo.size = sizeof(RTTriangle) * MAX_TRIANGLES;
+	triangleBufferInfo.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
+    m_pComputeTriangleBuffer = SDL_CreateGPUBuffer(m_pDevice, &triangleBufferInfo);
 
-    RTSphere spheres[3];
+	SDL_GPUBufferCreateInfo meshBufferInfo{};
+	meshBufferInfo.size = sizeof(RTMesh) * MAX_MESHES;
+	meshBufferInfo.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
+	m_pComputeMeshBuffer = SDL_CreateGPUBuffer(m_pDevice, &meshBufferInfo);
 
-    spheres[0].center_radius = vec4(0.0f, 0.0f, 0.0f, 5.0f);
-	spheres[0].material.colour = vec4(0.0f, 0.0f, 0.0, 0.0f);
-	spheres[0].material.emission = vec4(1.0f, 1.0f, 1.0f, 5.0f);
+	RTMaterial material1{ vec4(0, 0, 0, 0), vec4(1, 1, 1, 5) };
+	m_scene.LoadObj("C:\\Users\\manni\\downloads\\monkey.obj", material1);
+	RTMaterial material2{ vec4(1, 0, 1, 1), vec4(0, 0, 0, 0) };
+	m_scene.LoadObj("C:\\Users\\manni\\downloads\\plane.obj", material2);
 
-    spheres[1].center_radius = vec4(10.0f, 25.0f, 3.0f, 20.0f);
-    spheres[1].material.colour = vec4(1.0f);
-	spheres[1].material.emission = vec4(0.0f);
-
-    spheres[2].center_radius = vec4(10.0f, 3.0f, 3.0f, 2.0f);
-    spheres[2].material.colour = vec4(0.929f, 0.282f, 0.216f, 1.0f);
-    spheres[2].material.emission = vec4(0.0f);
-
-	SDL_GPUTransferBufferCreateInfo modelTransferInfo{};
-	modelTransferInfo.size = sizeof(spheres);
-	modelTransferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-	SDL_GPUTransferBuffer* modelTransferBuffer = SDL_CreateGPUTransferBuffer(m_pDevice, &modelTransferInfo);
-
-	auto pSphereData = static_cast<RTSphere *>(SDL_MapGPUTransferBuffer(m_pDevice, modelTransferBuffer, false));
-	SDL_memcpy(pSphereData, spheres, sizeof(spheres));
-	SDL_UnmapGPUTransferBuffer(m_pDevice, modelTransferBuffer);
-
-	pCommandBuffer = SDL_AcquireGPUCommandBuffer(m_pDevice);
-	SDL_GPUCopyPass* modelCopyPass = SDL_BeginGPUCopyPass(pCommandBuffer);
-
-	SDL_GPUTransferBufferLocation modelBufferLocation{};
-	modelBufferLocation.transfer_buffer = modelTransferBuffer;
-	modelBufferLocation.offset = 0;
-
-	SDL_GPUBufferRegion modelBufferRegion{};
-    modelBufferRegion.buffer = m_pComputeModelBuffer;
-	modelBufferRegion.size = sizeof(spheres);
-	modelBufferRegion.offset = 0;
-
-	m_sceneData.numModels = sizeof(spheres) / sizeof(RTSphere);
-	m_sceneData.maxBounceCount = 30;
-	m_sceneData.samplePerPixel = 50;
-
-	SDL_UploadToGPUBuffer(modelCopyPass, &modelBufferLocation, &modelBufferRegion, true);
-	SDL_ReleaseGPUTransferBuffer(m_pDevice, modelTransferBuffer);
-
-	SDL_EndGPUCopyPass(modelCopyPass);
-
-    if (!SDL_SubmitGPUCommandBuffer(pCommandBuffer))
-    {
-        std::cerr << "Failed to submit command buffer for model buffer upload." << std::endl;
-	}
+	m_scene.UploadSceneToGPU(m_pDevice, m_pComputeTriangleBuffer, m_pComputeMeshBuffer);
 }
 
 RayTracerApp::~RayTracerApp()
@@ -283,7 +245,8 @@ RayTracerApp::~RayTracerApp()
 
 	SDL_ReleaseGPUComputePipeline(m_pDevice, m_pComputePipeline);
 	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeRenderTarget);
-	SDL_ReleaseGPUBuffer(m_pDevice, m_pComputeModelBuffer);
+	SDL_ReleaseGPUBuffer(m_pDevice, m_pComputeTriangleBuffer);
+	SDL_ReleaseGPUBuffer(m_pDevice, m_pComputeMeshBuffer);
 
 	SDL_DestroyGPUDevice(m_pDevice);
 	SDL_DestroyWindow(m_pWindow);
@@ -299,7 +262,7 @@ void RayTracerApp::FrameUpdate()
 	// Upload the Camera view data and SceneData uniforms to the shader
     CameraData cameraData = m_camera.GetCameraData();
     SDL_PushGPUComputeUniformData(pCommandBuffer, 0, &cameraData, sizeof(CameraData));
-    SDL_PushGPUComputeUniformData(pCommandBuffer, 1, &m_sceneData, sizeof(RTSceneData));
+    SDL_PushGPUComputeUniformData(pCommandBuffer, 1, m_scene.GetSceneData(), sizeof(RTSceneData));
 
 	// Bind the read/write texture to use as a render target
 	SDL_GPUStorageTextureReadWriteBinding textureBinding{};
@@ -319,8 +282,9 @@ void RayTracerApp::FrameUpdate()
 	// Bind the compute pipeline with our path tracing shader
 	SDL_BindGPUComputePipeline(pComputePass, m_pComputePipeline);
 
-	// Geometry Buffer is readonly so we bind in separately
-    SDL_BindGPUComputeStorageBuffers(pComputePass, 0, &m_pComputeModelBuffer, 1);
+	// Geometry Buffers are readonly so we bind separately
+    SDL_BindGPUComputeStorageBuffers(pComputePass, 0, &m_pComputeTriangleBuffer, 1);
+	SDL_BindGPUComputeStorageBuffers(pComputePass, 1, &m_pComputeMeshBuffer, 1);
 
 	// Dispatch with precalculated size to cover screen
 	SDL_DispatchGPUCompute(pComputePass, m_dispatchSizeX, m_dispatchSizeY, 1);
@@ -373,8 +337,6 @@ void RayTracerApp::FrameUpdate()
 
     SDL_EndGPURenderPass(pRenderPass);
     SDL_SubmitGPUCommandBuffer(pCommandBuffer);
-
-	LoadObjFileTriangles("../cube.obj");
 }
 
 void RayTracerApp::UpdateFPSCounter() 
@@ -429,7 +391,7 @@ void RayTracerApp::HandleMovement(const float deltaTime)
     float mouseX, mouseY;
     if (const SDL_MouseButtonFlags mouseState = SDL_GetMouseState(&mouseX, &mouseY); mouseState & SDL_BUTTON_LEFT)
     {
-        m_camera.AdjustPitchYaw((mouseY - m_lastMousePosition.y) * 0.1f, (mouseX - m_lastMousePosition.x) * 0.1f);
+        m_camera.AdjustPitchYaw((m_lastMousePosition.y - mouseY) * 0.1f, (mouseX - m_lastMousePosition.x) * 0.1f);
     }
     m_lastMousePosition = vec2(mouseX, mouseY);
 }

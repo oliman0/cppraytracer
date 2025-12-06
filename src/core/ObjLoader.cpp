@@ -28,6 +28,11 @@ std::vector<ObjVertex> LoadObjFile(const std::string& filename)
     std::vector<vec3> vertexNormals;
 
     std::fstream file(filename, std::ios::in);
+    if (!file.is_open())
+    {
+        std::cerr << "Can't open file " << filename << std::endl;
+    }
+
     std::string line;
     while (std::getline(file, line))
     {
@@ -58,7 +63,7 @@ std::vector<ObjVertex> LoadObjFile(const std::string& filename)
                     triangleVertices.push_back(triangleVertices[triangleVertices.size() - 2]);
                 }
 
-                triangleVertices.push_back(ObjVertex{vertexPositions[indexGroup[0]], vertexNormals[indexGroup[1]]});
+                triangleVertices.push_back(ObjVertex{vertexPositions[indexGroup[0]], vertexNormals[indexGroup[2]]});
             }
         }
     }
@@ -66,7 +71,6 @@ std::vector<ObjVertex> LoadObjFile(const std::string& filename)
     return triangleVertices;
 }
 
-// TODO: single interpolated normal per tri
 std::vector<RTTriangle> LoadObjFileTriangles(const std::string& filename)
 {
     std::vector<RTTriangle> triangles;
@@ -76,7 +80,8 @@ std::vector<RTTriangle> LoadObjFileTriangles(const std::string& filename)
     {
         triangles.push_back(RTTriangle{
             vec4(vertices[i].position, 0), vec4(vertices[i+1].position, 0), vec4(vertices[i+2].position, 0),
-            vec4(vertices[i].normal, 0), vec4(vertices[i+1].normal, 0), vec4(vertices[i+2].normal, 0) });
+            vec4(vertices[i].normal, 0), vec4(vertices[i+1].normal, 0), vec4(vertices[i+2].normal, 0),
+        });
     }
 
     return triangles;

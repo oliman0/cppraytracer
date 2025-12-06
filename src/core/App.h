@@ -8,7 +8,7 @@
 
 #include "Global.h"
 #include "VertexLayout.h"
-#include "RaytracerStructDefs.h"
+#include "RaytracerScene.h"
 #include "Camera.h"
 #include "ObjLoader.h"
 
@@ -29,7 +29,8 @@ private:
 
 	SDL_GPUComputePipeline* m_pComputePipeline;
 	SDL_GPUTexture* m_pComputeRenderTarget;
-	SDL_GPUBuffer* m_pComputeModelBuffer;
+	SDL_GPUBuffer* m_pComputeTriangleBuffer;
+	SDL_GPUBuffer* m_pComputeMeshBuffer;
 
 	Uint32 m_computeSizeX;
 	Uint32 m_computeSizeY;
@@ -39,7 +40,7 @@ private:
 	SDL_GPUBuffer* m_pScreenQuadVertexBuffer;
 	int m_screenQuadVertexCount;
 
-	RTSceneData m_sceneData;
+	RTScene m_scene;
 
 	void UpdateFPSCounter();
 	Uint64 m_lastCount;
