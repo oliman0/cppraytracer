@@ -57,6 +57,7 @@ cbuffer uSceneData : register(b1, space2)
     uint numMeshes;
     uint maxBounces;
     uint samplesPerPixel;
+    uint dbgMode; // 0 = normal rendering, 1 = normal visualization, 2 = depth visualization, 3 = display mesh AABB
 };
 
 float RandomValue(inout uint seed)
@@ -227,16 +228,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
     Ray ray;
     ray.origin = cameraPosition.xyz;
     ray.dir = normalize(viewPoint - ray.origin);
-    
-    float3 totalLight = float3(0, 0, 0);
-    for (int i = 0; i < samplesPerPixel; i++)
-    {
-        totalLight += TraceRay(ray, rndSeed);
-    }
 
-    uOutputTexture[DTid.xy] = float4(totalLight / samplesPerPixel, 1);
-    
-    if (samplesPerPixel == 0)
+    if (dbgMode == 1) // Normal visualization
     {    
         Intersection intersection = CalculateIntersection(ray);
         if (intersection.hit)
@@ -247,5 +240,54 @@ void main(uint3 DTid : SV_DispatchThreadID)
         {
             uOutputTexture[DTid.xy] = float4(0, 0, 0, 1);
         }
+
+        return;
     }
+    else if (dbgMode == 2) // Depth visualization
+    {
+        Intersection intersection = CalculateIntersection(ray);
+        if (intersection.hit)
+        {
+            float depth = intersection.dst / 30.0; // Normalize by abitrary max depth 30.0
+            uOutputTexture[DTid.xy] = float4(depth, depth, depth, 1);
+        }
+        else
+        {
+            uOutputTexture[DTid.xy] = float4(0, 0, 0, 1);
+        }
+
+        return;
+    }
+    else if (dbgMode == 3) // Display mesh AABB
+    {
+        bool hitAny = false;
+        for (uint i = 0; i < numMeshes; i++)
+        {
+            Mesh meshInfo = uMeshes[i];
+            if (RayAABB(ray, meshInfo.bboxMin.xyz, meshInfo.bboxMax.xyz))
+            {
+                hitAny = true;
+                break;
+            }
+        }
+
+        if (hitAny)
+        {
+            uOutputTexture[DTid.xy] = float4(1, 1, 1, 1);
+        }
+        else
+        {
+            uOutputTexture[DTid.xy] = float4(0, 0, 0, 1);
+        }
+
+        return;
+    }
+    
+    float3 totalLight = float3(0, 0, 0);
+    for (int i = 0; i < samplesPerPixel; i++)
+    {
+        totalLight += TraceRay(ray, rndSeed);
+    }
+
+    uOutputTexture[DTid.xy] = float4(totalLight / samplesPerPixel, 1);
 }

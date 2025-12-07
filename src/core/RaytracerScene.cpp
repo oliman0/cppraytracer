@@ -2,7 +2,7 @@
 
 #include "ObjLoader.h"
 
-RTScene::RTScene() : m_sceneData(RTSceneData{ 0, 30, 0 })
+RTScene::RTScene() : m_sceneData(RTSceneData{ 0, 30, 10, 3 })
 {
 }
 
@@ -13,9 +13,9 @@ void RTScene::LoadObj(const std::string &fileName, const RTMaterial& material)
     float minX = std::numeric_limits<float>::max();
     float minY = std::numeric_limits<float>::max();
     float minZ = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::min();
-    float maxY = std::numeric_limits<float>::min();
-    float maxZ = std::numeric_limits<float>::min();
+    float maxX = std::numeric_limits<float>::lowest();
+    float maxY = std::numeric_limits<float>::lowest();
+    float maxZ = std::numeric_limits<float>::lowest();
 
     for (const auto& tri : objTriangles)
     {

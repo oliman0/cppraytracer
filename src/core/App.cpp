@@ -262,7 +262,7 @@ void RayTracerApp::FrameUpdate()
 	// Upload the Camera view data and SceneData uniforms to the shader
     CameraData cameraData = m_camera.GetCameraData();
     SDL_PushGPUComputeUniformData(pCommandBuffer, 0, &cameraData, sizeof(CameraData));
-    SDL_PushGPUComputeUniformData(pCommandBuffer, 1, m_scene.GetSceneData(), sizeof(RTSceneData));
+    SDL_PushGPUComputeUniformData(pCommandBuffer, 1, m_scene.SceneData(), sizeof(RTSceneData));
 
 	// Bind the read/write texture to use as a render target
 	SDL_GPUStorageTextureReadWriteBinding textureBinding{};
