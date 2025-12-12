@@ -27,10 +27,19 @@ private:
 
 	SDL_GPUSampler* m_pTextureSampler;
 
-	SDL_GPUComputePipeline* m_pComputePipeline;
-	SDL_GPUTexture* m_pComputeRenderTarget;
+	SDL_GPUComputePipeline* m_pRaytracerComputePipeline;
+
+	int m_currentComputeFramebuffer = 0;
+	SDL_GPUTexture* m_pComputeRenderTargetTexture[2] = {};
+	SDL_GPUTexture* m_pComputeDepthBufferTexture[2] = {};
+	SDL_GPUTexture* m_pComputeNormalBufferTexture[2] = {};
+
 	SDL_GPUBuffer* m_pComputeTriangleBuffer;
 	SDL_GPUBuffer* m_pComputeMeshBuffer;
+
+	SDL_GPUComputePipeline* m_pDenoiserComputePipeline;
+	SDL_GPUTexture* m_pComputeDenoiserOutputTexture;
+	float m_denoiserEmaSmoothing = 0.2f;
 
 	Uint32 m_computeSizeX;
 	Uint32 m_computeSizeY;

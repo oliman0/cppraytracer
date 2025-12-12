@@ -175,47 +175,120 @@ RayTracerApp::RayTracerApp() :
     SDL_ReleaseGPUShader(m_pDevice, pVertexShader);
     SDL_ReleaseGPUShader(m_pDevice, pFragmentShader);
 
-	SDL_GPUTextureCreateInfo textureInfo{};
+	SDL_GPUTextureCreateInfo computeRenderTargetInfo{};
 
-	textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
-    textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    textureInfo.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    textureInfo.width = SCREEN_WIDTH;
-    textureInfo.height = SCREEN_HEIGHT;
-	textureInfo.layer_count_or_depth = 1;
-	textureInfo.num_levels = 1;
-	textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+	computeRenderTargetInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    computeRenderTargetInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    computeRenderTargetInfo.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    computeRenderTargetInfo.width = SCREEN_WIDTH;
+    computeRenderTargetInfo.height = SCREEN_HEIGHT;
+	computeRenderTargetInfo.layer_count_or_depth = 1;
+	computeRenderTargetInfo.num_levels = 1;
+	computeRenderTargetInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
-	m_pComputeRenderTarget = SDL_CreateGPUTexture(m_pDevice, &textureInfo);
+	m_pComputeRenderTargetTexture[0] = SDL_CreateGPUTexture(m_pDevice, &computeRenderTargetInfo);
+	m_pComputeRenderTargetTexture[1] = SDL_CreateGPUTexture(m_pDevice, &computeRenderTargetInfo);
+
+	SDL_GPUTextureCreateInfo computeDepthBufferInfo{};
+
+	computeDepthBufferInfo.type = SDL_GPU_TEXTURETYPE_2D;
+	computeDepthBufferInfo.format = SDL_GPU_TEXTUREFORMAT_R16_FLOAT;
+	computeDepthBufferInfo.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+	computeDepthBufferInfo.width = SCREEN_WIDTH;
+	computeDepthBufferInfo.height = SCREEN_HEIGHT;
+	computeDepthBufferInfo.layer_count_or_depth = 1;
+	computeDepthBufferInfo.num_levels = 1;
+	computeDepthBufferInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+	m_pComputeDepthBufferTexture[0] = SDL_CreateGPUTexture(m_pDevice, &computeDepthBufferInfo);
+	m_pComputeDepthBufferTexture[1] = SDL_CreateGPUTexture(m_pDevice, &computeDepthBufferInfo);
+
+
+	SDL_GPUTextureCreateInfo computeNormalBufferInfo{};
+
+	computeNormalBufferInfo.type = SDL_GPU_TEXTURETYPE_2D;
+	computeNormalBufferInfo.format = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_SNORM;
+	computeNormalBufferInfo.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+	computeNormalBufferInfo.width = SCREEN_WIDTH;
+	computeNormalBufferInfo.height = SCREEN_HEIGHT;
+	computeNormalBufferInfo.layer_count_or_depth = 1;
+	computeNormalBufferInfo.num_levels = 1;
+	computeNormalBufferInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+	m_pComputeNormalBufferTexture[0] = SDL_CreateGPUTexture(m_pDevice, &computeNormalBufferInfo);
+	m_pComputeNormalBufferTexture[1] = SDL_CreateGPUTexture(m_pDevice, &computeNormalBufferInfo);
 
     size_t computeCodeSize;
 	void* pComputeCode = SDL_LoadFile("raytracing.comp.spv", &computeCodeSize);
     if (computeCodeSize == 0 || pComputeCode == nullptr)
     {
-        std::cerr << "Failed to load compute shader." << std::endl;
+        std::cerr << "Failed to load raytracer compute shader." << std::endl;
     }
 
-	SDL_GPUComputePipelineCreateInfo computePipelineInfo{};
+	SDL_GPUComputePipelineCreateInfo raytracerComputePipelineInfo{};
 
-    computePipelineInfo.code_size = computeCodeSize;
-	computePipelineInfo.code = static_cast<Uint8 *>(pComputeCode);
-	computePipelineInfo.entrypoint = "main";
-	computePipelineInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-    computePipelineInfo.num_samplers = 0;
-    computePipelineInfo.num_readonly_storage_textures = 0;
-    computePipelineInfo.num_readonly_storage_buffers = 2;
-    computePipelineInfo.num_readwrite_storage_textures = 1;
-    computePipelineInfo.num_readwrite_storage_buffers = 0;
-    computePipelineInfo.num_uniform_buffers = 2;
-    computePipelineInfo.threadcount_x = m_computeSizeX;
-    computePipelineInfo.threadcount_y = m_computeSizeY;
-    computePipelineInfo.threadcount_z = 1;
+    raytracerComputePipelineInfo.code_size = computeCodeSize;
+	raytracerComputePipelineInfo.code = static_cast<Uint8 *>(pComputeCode);
+	raytracerComputePipelineInfo.entrypoint = "main";
+	raytracerComputePipelineInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+    raytracerComputePipelineInfo.num_samplers = 0;
+    raytracerComputePipelineInfo.num_readonly_storage_textures = 0;
+    raytracerComputePipelineInfo.num_readonly_storage_buffers = 2;
+    raytracerComputePipelineInfo.num_readwrite_storage_textures = 3;
+    raytracerComputePipelineInfo.num_readwrite_storage_buffers = 0;
+    raytracerComputePipelineInfo.num_uniform_buffers = 2;
+    raytracerComputePipelineInfo.threadcount_x = m_computeSizeX;
+    raytracerComputePipelineInfo.threadcount_y = m_computeSizeY;
+    raytracerComputePipelineInfo.threadcount_z = 1;
 
-    m_pComputePipeline = SDL_CreateGPUComputePipeline(m_pDevice, &computePipelineInfo);
-    if (m_pComputePipeline == nullptr)
+    m_pRaytracerComputePipeline = SDL_CreateGPUComputePipeline(m_pDevice, &raytracerComputePipelineInfo);
+    if (m_pRaytracerComputePipeline == nullptr)
     {
-        std::cerr << "Failed to create compute pipeline." << std::endl;
+        std::cerr << "Failed to create raytracer compute pipeline." << std::endl;
     }
+
+	SDL_free(pComputeCode);
+
+	SDL_GPUTextureCreateInfo computeDenoiserOutputInfo{};
+
+	computeDenoiserOutputInfo.type = SDL_GPU_TEXTURETYPE_2D;
+	computeDenoiserOutputInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+	computeDenoiserOutputInfo.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+	computeDenoiserOutputInfo.width = SCREEN_WIDTH;
+	computeDenoiserOutputInfo.height = SCREEN_HEIGHT;
+	computeDenoiserOutputInfo.layer_count_or_depth = 1;
+	computeDenoiserOutputInfo.num_levels = 1;
+	computeDenoiserOutputInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+	m_pComputeDenoiserOutputTexture = SDL_CreateGPUTexture(m_pDevice, &computeDenoiserOutputInfo);
+
+	pComputeCode = SDL_LoadFile("denoiserSVGF.comp.spv", &computeCodeSize);
+	if (computeCodeSize == 0 || pComputeCode == nullptr)
+	{
+		std::cerr << "Failed to load denoiser compute shader." << std::endl;
+	}
+
+	SDL_GPUComputePipelineCreateInfo denoiserComputePipelineInfo{};
+
+	denoiserComputePipelineInfo.code_size = computeCodeSize;
+	denoiserComputePipelineInfo.code = static_cast<Uint8 *>(pComputeCode);
+	denoiserComputePipelineInfo.entrypoint = "main";
+	denoiserComputePipelineInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+	denoiserComputePipelineInfo.num_samplers = 0;
+	denoiserComputePipelineInfo.num_readonly_storage_textures = 1;
+	denoiserComputePipelineInfo.num_readonly_storage_buffers = 0;
+	denoiserComputePipelineInfo.num_readwrite_storage_textures = 1;
+	denoiserComputePipelineInfo.num_readwrite_storage_buffers = 0;
+	denoiserComputePipelineInfo.num_uniform_buffers = 1;
+	denoiserComputePipelineInfo.threadcount_x = m_computeSizeX;
+	denoiserComputePipelineInfo.threadcount_y = m_computeSizeY;
+	denoiserComputePipelineInfo.threadcount_z = 1;
+
+	m_pDenoiserComputePipeline = SDL_CreateGPUComputePipeline(m_pDevice, &denoiserComputePipelineInfo);
+	if (m_pDenoiserComputePipeline == nullptr)
+	{
+		std::cerr << "Failed to create denoiser compute pipeline." << std::endl;
+	}
 
 	SDL_free(pComputeCode);
 
@@ -230,9 +303,9 @@ RayTracerApp::RayTracerApp() :
 	m_pComputeMeshBuffer = SDL_CreateGPUBuffer(m_pDevice, &meshBufferInfo);
 
 	RTMaterial material1{ vec4(0, 0, 0, 0), vec4(1, 1, 1, 5) };
-	m_scene.LoadObj("C:\\Users\\manni\\downloads\\monkey.obj", material1);
+	m_scene.LoadObj(R"(C:\Users\manni\downloads\monkey.obj)", material1);
 	RTMaterial material2{ vec4(1, 0, 1, 1), vec4(0, 0, 0, 0) };
-	m_scene.LoadObj("C:\\Users\\manni\\downloads\\plane.obj", material2);
+	m_scene.LoadObj(R"(C:\Users\manni\downloads\plane.obj)", material2);
 
 	m_scene.UploadSceneToGPU(m_pDevice, m_pComputeTriangleBuffer, m_pComputeMeshBuffer);
 }
@@ -243,8 +316,20 @@ RayTracerApp::~RayTracerApp()
     SDL_ReleaseGPUGraphicsPipeline(m_pDevice, m_pGraphicsPipeline);
 	SDL_ReleaseGPUSampler(m_pDevice, m_pTextureSampler);
 
-	SDL_ReleaseGPUComputePipeline(m_pDevice, m_pComputePipeline);
-	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeRenderTarget);
+	SDL_ReleaseGPUComputePipeline(m_pDevice, m_pRaytracerComputePipeline);
+
+	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeRenderTargetTexture[0]);
+	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeRenderTargetTexture[1]);
+
+	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeDepthBufferTexture[0]);
+	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeDepthBufferTexture[1]);
+
+	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeNormalBufferTexture[0]);
+	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeNormalBufferTexture[1]);
+
+	SDL_ReleaseGPUComputePipeline(m_pDevice, m_pDenoiserComputePipeline);
+	SDL_ReleaseGPUTexture(m_pDevice, m_pComputeDenoiserOutputTexture);
+
 	SDL_ReleaseGPUBuffer(m_pDevice, m_pComputeTriangleBuffer);
 	SDL_ReleaseGPUBuffer(m_pDevice, m_pComputeMeshBuffer);
 
@@ -259,32 +344,69 @@ void RayTracerApp::FrameUpdate()
 
     SDL_GPUCommandBuffer* pCommandBuffer = SDL_AcquireGPUCommandBuffer(m_pDevice);
 
-	// Upload the Camera view data and SceneData uniforms to the shader
     CameraData cameraData = m_camera.GetCameraData();
     SDL_PushGPUComputeUniformData(pCommandBuffer, 0, &cameraData, sizeof(CameraData));
     SDL_PushGPUComputeUniformData(pCommandBuffer, 1, m_scene.SceneData(), sizeof(RTSceneData));
 
-	// Bind the read/write texture to use as a render target
-	SDL_GPUStorageTextureReadWriteBinding textureBinding{};
-	textureBinding.texture = m_pComputeRenderTarget;
-	textureBinding.mip_level = 0;
-	textureBinding.layer = 0;
-	textureBinding.cycle = false;
+	SDL_GPUStorageTextureReadWriteBinding raytracerTextureBindings[3];
+
+	raytracerTextureBindings[0].texture = m_pComputeRenderTargetTexture[m_currentComputeFramebuffer];
+	raytracerTextureBindings[0].mip_level = 0;
+	raytracerTextureBindings[0].layer = 0;
+	raytracerTextureBindings[0].cycle = false;
+
+	raytracerTextureBindings[1].texture = m_pComputeDepthBufferTexture[m_currentComputeFramebuffer];
+	raytracerTextureBindings[1].mip_level = 0;
+	raytracerTextureBindings[1].layer = 0;
+	raytracerTextureBindings[1].cycle = false;
+
+	raytracerTextureBindings[2].texture = m_pComputeNormalBufferTexture[m_currentComputeFramebuffer];
+	raytracerTextureBindings[2].mip_level = 0;
+	raytracerTextureBindings[2].layer = 0;
+	raytracerTextureBindings[2].cycle = false;
 
     SDL_GPUComputePass* pComputePass = SDL_BeginGPUComputePass(
         pCommandBuffer,
-        &textureBinding,
-        1,
+        raytracerTextureBindings,
+        3,
         nullptr,
         0
     );
 
-	// Bind the compute pipeline with our path tracing shader
-	SDL_BindGPUComputePipeline(pComputePass, m_pComputePipeline);
+	SDL_BindGPUComputePipeline(pComputePass, m_pRaytracerComputePipeline);
 
 	// Geometry Buffers are readonly so we bind separately
     SDL_BindGPUComputeStorageBuffers(pComputePass, 0, &m_pComputeTriangleBuffer, 1);
 	SDL_BindGPUComputeStorageBuffers(pComputePass, 1, &m_pComputeMeshBuffer, 1);
+
+	// Dispatch with precalculated size to cover screen
+	SDL_DispatchGPUCompute(pComputePass, m_dispatchSizeX, m_dispatchSizeY, 1);
+	SDL_EndGPUComputePass(pComputePass);
+
+	// Denoise Raytracer output
+	//
+
+	SDL_PushGPUComputeUniformData(pCommandBuffer, 0, &m_denoiserEmaSmoothing, sizeof(float));
+
+	SDL_GPUStorageTextureReadWriteBinding denoiserTextureBindings{};
+
+	denoiserTextureBindings.texture = m_pComputeDenoiserOutputTexture;
+	denoiserTextureBindings.mip_level = 0;
+	denoiserTextureBindings.layer = 0;
+	denoiserTextureBindings.cycle = false;
+
+	pComputePass = SDL_BeginGPUComputePass(
+		pCommandBuffer,
+		&denoiserTextureBindings,
+		1,
+		nullptr,
+		0
+	);
+
+	SDL_BindGPUComputePipeline(pComputePass, m_pDenoiserComputePipeline);
+
+	// Bind raytracer output as readonly texture
+	SDL_BindGPUComputeStorageTextures(pComputePass, 0, &m_pComputeRenderTargetTexture[m_currentComputeFramebuffer], 1);
 
 	// Dispatch with precalculated size to cover screen
 	SDL_DispatchGPUCompute(pComputePass, m_dispatchSizeX, m_dispatchSizeY, 1);
@@ -329,7 +451,7 @@ void RayTracerApp::FrameUpdate()
 
 	SDL_GPUTextureSamplerBinding samplerBinding{};
 	samplerBinding.sampler = m_pTextureSampler;
-	samplerBinding.texture = m_pComputeRenderTarget;
+	samplerBinding.texture = m_pComputeDenoiserOutputTexture;
     
     SDL_BindGPUFragmentSamplers(pRenderPass, 0, &samplerBinding, 1);
     
@@ -337,6 +459,8 @@ void RayTracerApp::FrameUpdate()
 
     SDL_EndGPURenderPass(pRenderPass);
     SDL_SubmitGPUCommandBuffer(pCommandBuffer);
+
+	m_currentComputeFramebuffer = 1 - m_currentComputeFramebuffer;
 }
 
 void RayTracerApp::UpdateFPSCounter() 
@@ -347,7 +471,7 @@ void RayTracerApp::UpdateFPSCounter()
     if (m_countDelta > 0)
     {
         const double fps = static_cast<double>(m_frequency) / static_cast<double>(m_countDelta);
-        std::cout << "FPS: " << fps << "\r" << std::endl;
+        //std::cout << "FPS: " << fps << "\r" << std::endl;
     }
 
     m_lastCount = currentCount;

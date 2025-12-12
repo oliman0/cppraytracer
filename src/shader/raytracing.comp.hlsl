@@ -39,7 +39,11 @@ struct Intersection
 };
 
 [[vk::image_format("rgba8")]]
-RWTexture2D<float4> uOutputTexture : register(u0, space1);
+RWTexture2D<float4> uRenderTarget : register(u0, space1);
+[[vk::image_format("r16f")]]
+RWTexture2D<float> uDepthBuffer : register(u1, space1);
+[[vk::image_format("rgba16snorm")]]
+RWTexture2D<float4> uNormalBuffer : register(u2, space1);
 
 cbuffer uCameraData : register(b0, space2)
 {
@@ -52,12 +56,12 @@ cbuffer uCameraData : register(b0, space2)
 
 StructuredBuffer<Triangle> uTriangles : register(t0, space0);
 StructuredBuffer<Mesh> uMeshes : register(t1, space0);
+
 cbuffer uSceneData : register(b1, space2)
 {
     uint numMeshes;
     uint maxBounces;
     uint samplesPerPixel;
-    uint dbgMode; // 0 = normal rendering, 1 = normal visualization, 2 = depth visualization, 3 = display mesh AABB
 };
 
 float RandomValue(inout uint seed)
@@ -183,7 +187,7 @@ Intersection CalculateIntersection(Ray ray)
     return closestIntersection;
 }
 
-float3 TraceRay(Ray ray, inout uint rndSeed)
+float3 TraceRay(Ray ray, inout uint rndSeed, out Intersection firstHit)
 {
     float3 resultLight = float3(0, 0, 0);
     float3 rayColor = float3(1, 1, 1);
@@ -191,6 +195,7 @@ float3 TraceRay(Ray ray, inout uint rndSeed)
     for (int i = 0; i < maxBounces; i++)
     {
         Intersection intersection = CalculateIntersection(ray);
+
         if (intersection.hit)
         {   
             ray.origin = intersection.hitPoint;
@@ -198,6 +203,8 @@ float3 TraceRay(Ray ray, inout uint rndSeed)
             
             resultLight += intersection.material.emission.xyz * intersection.material.emission.w * rayColor;
             rayColor *= intersection.material.color.rgb * dot(intersection.normal, ray.dir);
+
+            if (i == 0) firstHit = intersection;
         }
         else
         {
@@ -212,7 +219,7 @@ float3 TraceRay(Ray ray, inout uint rndSeed)
 void main(uint3 DTid : SV_DispatchThreadID)
 {
     int width, height;
-    uOutputTexture.GetDimensions(width, height);
+    uRenderTarget.GetDimensions(width, height);
     
     uint rndSeed = DTid.x + DTid.y * width;
     
@@ -228,66 +235,16 @@ void main(uint3 DTid : SV_DispatchThreadID)
     Ray ray;
     ray.origin = cameraPosition.xyz;
     ray.dir = normalize(viewPoint - ray.origin);
-
-    if (dbgMode == 1) // Normal visualization
-    {    
-        Intersection intersection = CalculateIntersection(ray);
-        if (intersection.hit)
-        {
-            uOutputTexture[DTid.xy] = float4(intersection.normal * 0.5 + 0.5, 1);
-        }
-        else
-        {
-            uOutputTexture[DTid.xy] = float4(0, 0, 0, 1);
-        }
-
-        return;
-    }
-    else if (dbgMode == 2) // Depth visualization
-    {
-        Intersection intersection = CalculateIntersection(ray);
-        if (intersection.hit)
-        {
-            float depth = intersection.dst / 30.0; // Normalize by abitrary max depth 30.0
-            uOutputTexture[DTid.xy] = float4(depth, depth, depth, 1);
-        }
-        else
-        {
-            uOutputTexture[DTid.xy] = float4(0, 0, 0, 1);
-        }
-
-        return;
-    }
-    else if (dbgMode == 3) // Display mesh AABB
-    {
-        bool hitAny = false;
-        for (uint i = 0; i < numMeshes; i++)
-        {
-            Mesh meshInfo = uMeshes[i];
-            if (RayAABB(ray, meshInfo.bboxMin.xyz, meshInfo.bboxMax.xyz))
-            {
-                hitAny = true;
-                break;
-            }
-        }
-
-        if (hitAny)
-        {
-            uOutputTexture[DTid.xy] = float4(1, 1, 1, 1);
-        }
-        else
-        {
-            uOutputTexture[DTid.xy] = float4(0, 0, 0, 1);
-        }
-
-        return;
-    }
     
+    Intersection firstHit = (Intersection)0;
     float3 totalLight = float3(0, 0, 0);
+
     for (int i = 0; i < samplesPerPixel; i++)
     {
-        totalLight += TraceRay(ray, rndSeed);
+        totalLight += TraceRay(ray, rndSeed, firstHit);
     }
 
-    uOutputTexture[DTid.xy] = float4(totalLight / samplesPerPixel, 1);
+    uRenderTarget[DTid.xy] = float4(totalLight / samplesPerPixel, 1);
+    uDepthBuffer[DTid.xy] = firstHit.dst;
+    uNormalBuffer[DTid.xy] = float4(firstHit.normal, 1);
 }

@@ -13,7 +13,7 @@ struct CameraData
 	vec4 cameraForward;
 	vec4 cameraRight;
 	vec4 cameraUp;
-	vec4 viewParams; // x : plane width, y : plane height, z : near plane, w : padding
+	vec4 viewParams; // x : projection plane width, y : projection plane height, z : near plane, w : padding
 };
 
 class Camera

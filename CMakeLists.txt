@@ -48,7 +48,7 @@ endfunction()
 project(raytracer LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 
-add_shaders(shader src/shader/screenShader.frag.hlsl src/shader/screenShader.vert.hlsl src/shader/raytracing.comp.hlsl)
+add_shaders(shader src/shader/screenShader.frag.hlsl src/shader/screenShader.vert.hlsl src/shader/raytracing.comp.hlsl src/shader/denoiserSVGF.comp.hlsl)
 
 add_executable(raytracer
         src/core/main.cpp

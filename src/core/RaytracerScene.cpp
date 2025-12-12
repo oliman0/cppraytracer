@@ -2,7 +2,7 @@
 
 #include "ObjLoader.h"
 
-RTScene::RTScene() : m_sceneData(RTSceneData{ 0, 30, 10, 3 })
+RTScene::RTScene() : m_sceneData(RTSceneData{ 0, 30, 1 })
 {
 }
 

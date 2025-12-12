@@ -15,7 +15,6 @@ struct RTSceneData
 	uint numModels;
 	uint maxBounceCount;
 	uint samplePerPixel;
-	uint dbgMode; // 0: normal rendering, 1: display normals, 2: display depth, 3: display mesh AABB
 };
 
 struct RTMaterial
